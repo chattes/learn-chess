@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Boring Games</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -12,47 +12,80 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 36px;
+    gap: 28px;
     font-family: system-ui, -apple-system, sans-serif;
     background: #1e1e2e;
     color: #e4e4e7;
-    padding: 24px;
+    padding: 20px 16px;
   }
-  h1 { font-size: 2.4rem; letter-spacing: 4px; }
-  p.sub { color: #a6adc8; margin-top: -24px; }
-  .grid { display: flex; gap: 24px; flex-wrap: wrap; justify-content: center; }
-  a.card {
+  header { text-align: center; }
+  h1 { font-size: 1.8rem; letter-spacing: 3px; }
+  p.sub { color: #a6adc8; margin-top: 8px; font-size: 0.95rem; }
+  .grid {
     display: flex;
     flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    max-width: 420px;
+  }
+  a.card {
+    display: flex;
     align-items: center;
-    gap: 12px;
-    width: 240px;
-    padding: 36px 20px;
+    gap: 16px;
+    width: 100%;
+    padding: 20px;
+    min-height: 96px;
     background: #313244;
     border-radius: 16px;
     text-decoration: none;
     color: #e4e4e7;
     transition: transform 0.15s, background 0.15s;
+    touch-action: manipulation;
   }
-  a.card:hover { transform: translateY(-6px); background: #45475a; }
-  .icon { font-size: 4rem; }
-  .name { font-size: 1.3rem; font-weight: 700; }
-  .desc { font-size: 0.85rem; color: #a6adc8; text-align: center; line-height: 1.4; }
+  a.card:hover, a.card:active { background: #45475a; }
+  .icon { font-size: 3.2rem; flex-shrink: 0; }
+  .name { font-size: 1.2rem; font-weight: 700; }
+  .desc { font-size: 0.85rem; color: #a6adc8; line-height: 1.4; margin-top: 4px; }
+  @media (min-width: 640px) {
+    body { gap: 36px; }
+    h1 { font-size: 2.4rem; letter-spacing: 4px; }
+    .grid {
+      flex-direction: row;
+      max-width: 620px;
+      gap: 24px;
+    }
+    a.card {
+      flex-direction: column;
+      justify-content: center;
+      text-align: center;
+      padding: 36px 20px;
+      gap: 12px;
+    }
+    a.card:hover { transform: translateY(-6px); }
+    .icon { font-size: 4rem; }
+    .name { font-size: 1.3rem; }
+  }
 </style>
 </head>
 <body>
-<h1>BORING GAMES</h1>
-<p class="sub">Pick a game. No account, no ads.</p>
+<header>
+  <h1>BORING GAMES</h1>
+  <p class="sub">Pick a game. No account, no ads.</p>
+</header>
 <div class="grid">
   <a class="card" href="chess.html">
     <div class="icon">&#9822;</div>
-    <div class="name">Chess Coach</div>
-    <div class="desc">Vs bot with hints and blunder detection. Learn while you play.</div>
+    <div>
+      <div class="name">Chess Coach</div>
+      <div class="desc">Vs bot with hints and blunder detection. Learn while you play.</div>
+    </div>
   </a>
   <a class="card" href="tic-tac-toe.html">
     <div class="icon">&#10005;</div>
-    <div class="name">Tic Tac Toe</div>
-    <div class="desc">Vs bot, three difficulties. Classic quick duel.</div>
+    <div>
+      <div class="name">Tic Tac Toe</div>
+      <div class="desc">Vs bot, three difficulties. Classic quick duel.</div>
+    </div>
   </a>
 </div>
 </body>

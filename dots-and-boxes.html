@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dots and Boxes Coach vs Bot</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1e1e2e;
+    color: #e4e4e7;
+    padding: 12px;
+  }
+  @media (min-width: 900px) {
+    body {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 24px;
+      padding: 20px;
+    }
+  }
+  h1 { font-size: 1.3rem; letter-spacing: 1px; margin-bottom: 10px; }
+  @media (min-width: 900px) { h1 { font-size: 1.5rem; } }
+  svg {
+    width: min(88vw, 440px);
+    height: auto;
+    background: #313244;
+    border-radius: 12px;
+    border: 3px solid #45475a;
+    touch-action: manipulation;
+  }
+  .dot { fill: #cdd6f4; }
+  .line-done { stroke: #89b4fa; stroke-width: 6; stroke-linecap: round; }
+  .line-last { stroke: #a6e3a1; }
+  .line-hit { stroke: transparent; stroke-width: 26; cursor: pointer; }
+  .line-hit:hover { stroke: rgba(137,180,250,0.25); }
+  .box-hu { fill: rgba(166,227,161,0.35); stroke: #a6e3a1; stroke-width: 2; }
+  .box-bot { fill: rgba(243,139,168,0.35); stroke: #f38ba8; stroke-width: 2; }
+  .box-label { font-size: 20px; font-weight: 700; fill: #e4e4e7; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }
+  #panel {
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card { background: #313244; border-radius: 10px; padding: 14px; }
+  #status { font-size: 1.15rem; font-weight: 700; color: #a6e3a1; }
+  #score { font-size: 0.95rem; color: #cdd6f4; margin-top: 4px; }
+  #coach {
+    background: #2a2b3d;
+    border-left: 4px solid #89b4fa;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    min-height: 3.2em;
+  }
+  #coach.good { border-left-color: #a6e3a1; }
+  #coach.warn { border-left-color: #f9e2af; }
+  #coach.bad { border-left-color: #f38ba8; }
+  #controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, select {
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #45475a;
+    color: #e4e4e7;
+  }
+  button:hover, select:hover { background: #585b70; }
+  #hintBtn { background: #89b4fa; color: #1e1e2e; }
+  #hintBtn:hover { background: #b4befe; }
+  #undoBtn { background: #f9e2af; color: #1e1e2e; }
+  #newBtn { background: #a6e3a1; color: #1e1e2e; }
+  #tips { font-size: 0.85rem; color: #a6adc8; line-height: 1.5; }
+  #tips b { color: #cdd6f4; }
+  #helpModal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+  }
+  #helpModal.open { display: flex; }
+  .modal-card {
+    background: #313244;
+    border-radius: 12px;
+    max-width: 480px;
+    width: 100%;
+    max-height: 82vh;
+    overflow-y: auto;
+    padding: 18px;
+    line-height: 1.5;
+    font-size: 0.92rem;
+  }
+  .modal-card h2 { font-size: 1.2rem; margin-bottom: 10px; color: #89b4fa; }
+  .modal-card h3 { font-size: 0.95rem; margin: 12px 0 4px; color: #cdd6f4; }
+  .modal-card ul { padding-left: 18px; }
+  .modal-close {
+    float: right;
+    background: #45475a;
+    border: none;
+    border-radius: 6px;
+    color: #e4e4e7;
+    font-size: 1rem;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div>
+  <h1>Dots and Boxes Coach</h1>
+  <svg id="board" viewBox="0 0 480 480" aria-label="Dots and boxes board" role="application"></svg>
+</div>
+<div id="panel">
+  <div class="card">
+    <div id="status">Your turn</div>
+    <div id="score">You: 0 boxes &nbsp;|&nbsp; Bot: 0 boxes</div>
+  </div>
+  <div class="card">
+    <div style="margin-bottom:6px;font-weight:700;color:#cdd6f4">Coach</div>
+    <div id="coach">Avoid drawing the third side of any box — he'll take it next turn.</div>
+  </div>
+  <div class="card">
+    <div id="controls">
+      <button id="helpBtn">Help</button>
+      <button id="hintBtn">Hint</button>
+      <button id="undoBtn">Take Back</button>
+      <button id="newBtn">New Game</button>
+      <select id="difficulty">
+        <option value="1">Bot: Easy</option>
+        <option value="2" selected>Bot: Medium</option>
+        <option value="3">Bot: Hard</option>
+      </select>
+    </div>
+  </div>
+  <div class="card" id="tips">
+    <b>Coach tips:</b><br>
+    1. Never draw the third side of a box — opponent takes it free.<br>
+    2. Completing a box scores AND gives you another turn — chains win games.<br>
+    3. Early game: spread lines, don't open boxes for him.<br>
+    4. Late game: count remaining lines; hand him a chain only if you must.<br>
+    5. When one 2-line chain is left, force him to open it for you.<br>
+  </div>
+</div>
+
+<div id="helpModal" role="dialog" aria-label="Dots and boxes rules">
+  <div class="modal-card">
+    <button class="modal-close" id="helpClose">&times;</button>
+    <h2>How to Play Dots and Boxes</h2>
+    <p><b>Goal:</b> claim more boxes than the bot. You play first.</p>
+    <h3>Basics</h3>
+    <ul>
+      <li>The board shows a grid of dots with boxes between them.</li>
+      <li>On your turn, draw a single line between two adjacent dots (click or tap the space between dots).</li>
+      <li>If your line completes the 4th side of a box, you claim that box and <b>draw again</b>.</li>
+      <li>Chain several boxes in one turn by completing them one after another.</li>
+    </ul>
+    <h3>End of game</h3>
+    <ul>
+      <li>Game ends when every box is claimed.</li>
+      <li>Most boxes wins.</li>
+    </ul>
+    <h3>Beginner tips</h3>
+    <ul>
+      <li>Third side of any box is poison — never draw it unless forced.</li>
+      <li>Look ahead: after your move, could the bot take a box and then another in the same chain?</li>
+      <li>Late game, count the chains — sometimes giving one small box forces him to open a bigger one.</li>
+    </ul>
+  </div>
+</div>
+
+<script type="module">
+const W = 4;                 // boxes per side
+const DOTS = W + 1;
+const HUMAN = 1, BOT = 2;
+const opp = s => s === HUMAN ? BOT : HUMAN;
+const SEP = 96, M = 40;
+const dotPos = i => M + i * SEP;
+
+function emptyState() {
+  const h = [], v = [], boxes = [];
+  for (let r = 0; r < DOTS; r++) h.push(new Array(W).fill(false));
+  for (let r = 0; r < W; r++) v.push(new Array(DOTS).fill(false));
+  for (let r = 0; r < W; r++) boxes.push(new Array(W).fill(0));
+  return { h, v, boxes, hu: 0, bot: 0 };
+}
+
+function cloneState(st) {
+  return {
+    h: st.h.map(row => row.slice()),
+    v: st.v.map(row => row.slice()),
+    boxes: st.boxes.map(row => row.slice()),
+    hu: st.hu, bot: st.bot
+  };
+}
+
+function allLines(st) {
+  const lines = [];
+  for (let r = 0; r < DOTS; r++) for (let c = 0; c < W; c++) if (!st.h[r][c]) lines.push({ t: 'h', r, c });
+  for (let r = 0; r < W; r++) for (let c = 0; c < DOTS; c++) if (!st.v[r][c]) lines.push({ t: 'v', r, c });
+  return lines;
+}
+
+function boxSides(st, r, c) {
+  let n = 0;
+  if (st.h[r][c]) n++;
+  if (st.h[r+1][c]) n++;
+  if (st.v[r][c]) n++;
+  if (st.v[r][c+1]) n++;
+  return n;
+}
+
+// returns { st, completed: [[r,c],...] }
+function applyLine(st, line, player) {
+  const ns = cloneState(st);
+  if (line.t === 'h') ns.h[line.r][line.c] = true; else ns.v[line.r][line.c] = true;
+  const completed = [];
+  const check = (r, c) => {
+    if (r < 0 || r >= W || c < 0 || c >= W || ns.boxes[r][c] !== 0) return;
+    if (boxSides(ns, r, c) === 4) { ns.boxes[r][c] = player; completed.push([r, c]); }
+  };
+  if (line.t === 'h') { check(line.r - 1, line.c); check(line.r, line.c); }
+  else { check(line.r, line.c - 1); check(line.r, line.c); }
+  if (completed.length) { if (player === HUMAN) ns.hu += completed.length; else ns.bot += completed.length; }
+  return { st: ns, completed };
+}
+
+function terminalEval(st) {
+  const d = st.hu - st.bot;
+  if (d > 0) return 100000 + d;
+  if (d < 0) return -100000 + d;
+  return 0;
+}
+
+function minimax(st, side, depth, alpha, beta) {
+  const moves = allLines(st);
+  if (!moves.length) return terminalEval(st);
+  if (depth === 0) return (st.hu - st.bot) * 100;
+  const maximizing = side === HUMAN;
+  let val = maximizing ? -Infinity : Infinity;
+  // order: completing lines first
+  for (const m of moves) {
+    const { st: ns, completed } = applyLine(st, m, side);
+    const nextSide = completed.length ? side : opp(side);
+    const sc = minimax(ns, nextSide, depth - 1, alpha, beta);
+    if (maximizing) { val = Math.max(val, sc); alpha = Math.max(alpha, val); }
+    else { val = Math.min(val, sc); beta = Math.min(beta, val); }
+    if (alpha >= beta) break;
+  }
+  return val;
+}
+
+function findBestMove(st, side, depth) {
+  const isMax = side === HUMAN;
+  let best = isMax ? -Infinity : Infinity, bestMove = null, bestCompleted = 0;
+  const moves = allLines(st);
+  const free = moves.length;
+  const useDepth = free <= 10 ? depth + 1 : depth;
+  for (const m of moves) {
+    const { st: ns, completed } = applyLine(st, m, side);
+    const nextSide = completed.length ? side : opp(side);
+    const sc = minimax(ns, nextSide, useDepth - 1, -Infinity, Infinity);
+    if (isMax ? sc > best : sc < best) { best = sc; bestMove = m; bestCompleted = completed.length; }
+  }
+  return { move: bestMove, score: best };
+}
+
+function evalForReview(st) { return (st.hu - st.bot) * 100; }
+
+// ---------- UI ----------
+const svg = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const scoreEl = document.getElementById('score');
+const coachEl = document.getElementById('coach');
+const difficultyEl = document.getElementById('difficulty');
+
+let state = emptyState();
+let turn = HUMAN;
+let lastLine = null;
+let history = [];
+let botThinking = false;
+
+function render() {
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  // boxes
+  for (let r = 0; r < W; r++) for (let c = 0; c < W; c++) {
+    const owner = state.boxes[r][c];
+    if (owner) {
+      const rect = document.createElementNS(ns, 'rect');
+      rect.setAttribute('x', dotPos(c) + 5);
+      rect.setAttribute('y', dotPos(r) + 5);
+      rect.setAttribute('width', SEP - 10);
+      rect.setAttribute('height', SEP - 10);
+      rect.setAttribute('rx', 8);
+      rect.setAttribute('class', owner === HUMAN ? 'box-hu' : 'box-bot');
+      svg.appendChild(rect);
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', dotPos(c) + SEP / 2);
+      label.setAttribute('y', dotPos(r) + SEP / 2);
+      label.setAttribute('class', 'box-label');
+      label.textContent = owner === HUMAN ? 'YOU' : 'BOT';
+      svg.appendChild(label);
+    }
+  }
+  // lines drawn
+  for (let r = 0; r < DOTS; r++) for (let c = 0; c < W; c++) {
+    if (state.h[r][c]) svg.appendChild(lineEl(ns, dotPos(c), dotPos(r), dotPos(c + 1), dotPos(r), isLast('h', r, c)));
+  }
+  for (let r = 0; r < W; r++) for (let c = 0; c < DOTS; c++) {
+    if (state.v[r][c]) svg.appendChild(lineEl(ns, dotPos(c), dotPos(r), dotPos(c), dotPos(r + 1), isLast('v', r, c)));
+  }
+  // clickable hit lines
+  for (let r = 0; r < DOTS; r++) for (let c = 0; c < W; c++) {
+    if (!state.h[r][c]) svg.appendChild(hitEl(ns, dotPos(c), dotPos(r), dotPos(c + 1), dotPos(r), { t: 'h', r, c }));
+  }
+  for (let r = 0; r < W; r++) for (let c = 0; c < DOTS; c++) {
+    if (!state.v[r][c]) svg.appendChild(hitEl(ns, dotPos(c), dotPos(r), dotPos(c), dotPos(r + 1), { t: 'v', r, c }));
+  }
+  // dots
+  for (let r = 0; r < DOTS; r++) for (let c = 0; c < DOTS; c++) {
+    const dot = document.createElementNS(ns, 'circle');
+    dot.setAttribute('cx', dotPos(c));
+    dot.setAttribute('cy', dotPos(r));
+    dot.setAttribute('r', 7);
+    dot.setAttribute('class', 'dot');
+    svg.appendChild(dot);
+  }
+  scoreEl.textContent = `You: ${state.hu} boxes | Bot: ${state.bot} boxes`;
+  updateStatus();
+}
+
+function lineEl(ns, x1, y1, x2, y2, isLastMove) {
+  const l = document.createElementNS(ns, 'line');
+  l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+  l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+  l.setAttribute('class', 'line-done' + (isLastMove ? ' line-last' : ''));
+  return l;
+}
+function isLast(t, r, c) {
+  return lastLine && lastLine.t === t && lastLine.r === r && lastLine.c === c;
+}
+function hitEl(ns, x1, y1, x2, y2, line) {
+  const l = document.createElementNS(ns, 'line');
+  l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+  l.setAttribute('x2', x2); l.setAttribute('y2', y2);
+  l.setAttribute('class', 'line-hit');
+  l.addEventListener('click', () => onLineClick(line));
+  return l;
+}
+
+function gameOver() { return allLines(state).length === 0; }
+
+function updateStatus() {
+  if (gameOver()) {
+    if (state.hu > state.bot) { statusEl.textContent = 'You win!'; statusEl.style.color = '#a6e3a1'; }
+    else if (state.bot > state.hu) { statusEl.textContent = 'Bot wins!'; statusEl.style.color = '#f38ba8'; }
+    else { statusEl.textContent = 'Draw!'; statusEl.style.color = '#f9e2af'; }
+    return;
+  }
+  statusEl.style.color = '#a6e3a1';
+  statusEl.textContent = turn === HUMAN ? 'Your turn' : 'Bot thinking…';
+}
+
+function setCoach(text, kind) { coachEl.textContent = text; coachEl.className = kind || ''; }
+
+function snapshot() {
+  return { state: cloneState(state), turn, lastLine: lastLine ? { ...lastLine } : null };
+}
+
+function onLineClick(line) {
+  if (botThinking || turn !== HUMAN || gameOver()) return;
+  const before = evalForReview(state);
+  history.push(snapshot());
+  const { st, completed } = applyLine(state, line, HUMAN);
+  state = st;
+  lastLine = line;
+  const after = evalForReview(state);
+  const verdict = reviewMove(before, after, completed);
+  setCoach(verdict.text, verdict.kind);
+  if (!completed.length) {
+    turn = BOT;
+    runBot();
+  } else {
+    setCoach(verdict.text + ' Box! Draw again.', verdict.kind || 'good');
+  }
+  render();
+}
+
+function reviewMove(before, after, completed) {
+  const loss = before - after;
+  if (completed.length) return { text: 'Nice — you completed a box!', kind: 'good' };
+  // count 3-sided boxes bot can grab
+  let freebies = 0;
+  for (let r = 0; r < W; r++) for (let c = 0; c < W; c++) {
+    if (state.boxes[r][c] !== 0) continue;
+    if (boxSides(state, r, c) === 3) freebies++;
+  }
+  if (freebies >= 2) return { text: `Careless — he can take ${freebies} boxes in a chain! Never draw a third side.`, kind: 'bad' };
+  if (freebies === 1) return { text: 'Careless — you just gave him a free box. Avoid third sides.', kind: 'warn' };
+  if (loss > 100) return { text: 'Slightly worse position. Keep the chains closed.', kind: 'warn' };
+  return { text: 'Safe line. Keep building walls, not openings.', kind: '' };
+}
+
+function runBot() {
+  botThinking = true;
+  updateStatus();
+  const depth = +difficultyEl.value;
+  const delay = () => setTimeout(botStep, 400);
+  delay();
+  function botStep() {
+    const { move, score } = findBestMove(state, BOT, depth);
+    if (!move) { botThinking = false; turn = HUMAN; render(); return; }
+    history.push(snapshot());
+    const { st, completed } = applyLine(state, move, BOT);
+    state = st;
+    lastLine = move;
+    if (completed.length) {
+      // bot keeps moving
+      render();
+      setCoach(`Bot took ${completed.length} box(es).`, 'warn');
+      if (allLines(state).length) { delay(); } else { botThinking = false; turn = HUMAN; render(); }
+      return;
+    }
+    botThinking = false;
+    turn = HUMAN;
+    render();
+    if (!allLines(state).length) return;
+  }
+}
+
+document.getElementById('hintBtn').addEventListener('click', () => {
+  if (botThinking || turn !== HUMAN || gameOver()) return;
+  const { move } = findBestMove(state, HUMAN, 2);
+  if (!move) return;
+  // flash the line briefly
+  render();
+  const ns = 'http://www.w3.org/2000/svg';
+  let hl;
+  if (move.t === 'h') hl = lineEl(ns, dotPos(move.c), dotPos(move.r), dotPos(move.c + 1), dotPos(move.r), false);
+  else hl = lineEl(ns, dotPos(move.c), dotPos(move.r), dotPos(move.c), dotPos(move.r + 1), false);
+  hl.setAttribute('stroke', '#a6e3a1');
+  hl.setAttribute('stroke-dasharray', '6 6');
+  svg.appendChild(hl);
+  setTimeout(() => render(), 1400);
+  const { completed } = applyLine(state, move, HUMAN);
+  if (completed.length) setCoach('Hint: draw there — it completes a box (and you move again!).', 'good');
+  else {
+    // warn if hint avoids freebie? find if any move completes
+    setCoach('Hint: dashed green line is the best move.', '');
+  }
+});
+
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (botThinking) return;
+  // restore the snapshot taken before the last human decision
+  let idx = -1;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].turn === HUMAN) { idx = i; break; }
+  }
+  if (idx === -1) return;
+  restore(history[idx]);
+  history = history.slice(0, idx);
+  setCoach('Move taken back. Try a new idea.', '');
+  render();
+});
+
+function restore(s) {
+  state = cloneState(s.state);
+  turn = HUMAN;
+  lastLine = null;
+  botThinking = false;
+}
+
+const helpModal = document.getElementById('helpModal');
+document.getElementById('helpBtn').addEventListener('click', () => helpModal.classList.add('open'));
+helpModal.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('open'); });
+document.getElementById('helpClose').addEventListener('click', () => helpModal.classList.remove('open'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') helpModal.classList.remove('open'); });
+
+document.getElementById('newBtn').addEventListener('click', resetGame);
+difficultyEl.addEventListener('change', resetGame);
+
+function resetGame() {
+  state = emptyState();
+  turn = HUMAN;
+  lastLine = null;
+  history = [];
+  botThinking = false;
+  setCoach('New game. Avoid third sides — wait for a gift.', '');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

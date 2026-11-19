@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Othello Coach vs Bot</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1e1e2e;
+    color: #e4e4e7;
+    padding: 12px;
+  }
+  @media (min-width: 900px) {
+    body {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 24px;
+      padding: 20px;
+    }
+  }
+  h1 { font-size: 1.4rem; letter-spacing: 1px; margin-bottom: 10px; }
+  @media (min-width: 900px) { h1 { font-size: 1.6rem; } }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, min(11.5vw, 60px));
+    grid-template-rows: repeat(8, min(11.5vw, 60px));
+    border: 3px solid #45475a;
+    border-radius: 6px;
+    background: #1f6f43;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .sq {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #2e8b57;
+    border: 1px solid #1f6f43;
+    position: relative;
+    cursor: pointer;
+  }
+  .sq.hint-from, .sq.hint-to { outline: 4px dashed #a6e3a1; outline-offset: -4px; }
+  .sq.last-move { background: #57a06f; }
+  .sq.hint-dot::after {
+    content: '';
+    width: 18%; height: 18%;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.4);
+    position: absolute;
+  }
+  .piece {
+    width: 80%; height: 80%;
+    border-radius: 50%;
+    box-shadow: inset 0 -4px 6px rgba(0,0,0,0.4), 0 2px 3px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+  .piece.b { background: radial-gradient(circle at 35% 35%, #555, #111 70%, #000); }
+  .piece.w { background: radial-gradient(circle at 35% 35%, #fff, #d5d5d5 70%, #a8a8a8); }
+  #panel {
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card { background: #313244; border-radius: 10px; padding: 14px; }
+  #status { font-size: 1.15rem; font-weight: 700; color: #a6e3a1; }
+  #score { font-size: 0.95rem; color: #cdd6f4; margin-top: 4px; }
+  #coach {
+    background: #2a2b3d;
+    border-left: 4px solid #89b4fa;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    min-height: 3.2em;
+  }
+  #coach.good { border-left-color: #a6e3a1; }
+  #coach.warn { border-left-color: #f9e2af; }
+  #coach.bad { border-left-color: #f38ba8; }
+  #controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, select {
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #45475a;
+    color: #e4e4e7;
+  }
+  button:hover, select:hover { background: #585b70; }
+  #hintBtn { background: #89b4fa; color: #1e1e2e; }
+  #hintBtn:hover { background: #b4befe; }
+  #undoBtn { background: #f9e2af; color: #1e1e2e; }
+  #newBtn { background: #a6e3a1; color: #1e1e2e; }
+  #tips { font-size: 0.85rem; color: #a6adc8; line-height: 1.5; }
+  #tips b { color: #cdd6f4; }
+  #helpModal {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.65);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 16px;
+  }
+  #helpModal.open { display: flex; }
+  .modal-card {
+    background: #313244;
+    border-radius: 12px;
+    max-width: 480px;
+    width: 100%;
+    max-height: 82vh;
+    overflow-y: auto;
+    padding: 18px;
+    line-height: 1.5;
+    font-size: 0.92rem;
+  }
+  .modal-card h2 { font-size: 1.2rem; margin-bottom: 10px; color: #89b4fa; }
+  .modal-card h3 { font-size: 0.95rem; margin: 12px 0 4px; color: #cdd6f4; }
+  .modal-card ul { padding-left: 18px; }
+  .modal-close {
+    float: right;
+    background: #45475a;
+    border: none;
+    border-radius: 6px;
+    color: #e4e4e7;
+    font-size: 1rem;
+    padding: 2px 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div>
+  <h1>Othello Coach</h1>
+  <div id="board"></div>
+</div>
+<div id="panel">
+  <div class="card">
+    <div id="status">Your turn (Black)</div>
+    <div id="score">You: 2 &nbsp;|&nbsp; Bot: 2</div>
+  </div>
+  <div class="card">
+    <div style="margin-bottom:6px;font-weight:700;color:#cdd6f4">Coach</div>
+    <div id="coach">Take the corner — corners can't be flipped.</div>
+  </div>
+  <div class="card">
+    <div id="controls">
+      <button id="helpBtn">Help</button>
+      <button id="hintBtn">Hint</button>
+      <button id="undoBtn">Take Back</button>
+      <button id="newBtn">New Game</button>
+      <select id="difficulty">
+        <option value="2">Bot: Easy</option>
+        <option value="3" selected>Bot: Medium</option>
+        <option value="5">Bot: Hard</option>
+      </select>
+    </div>
+  </div>
+  <div class="card" id="tips">
+    <b>Coach tips:</b><br>
+    1. Corners are gold — they never flip back.<br>
+    2. Edges are strong, but avoid giving him the corner.<br>
+    3. Squares next to empty corners are traps — opponent grabs corner next.<br>
+    4. Don't grab too many discs early — fewer mobility is worse.<br>
+    5. Stay mobile: more legal moves beats more discs in midgame.<br>
+    6. Late game, every disc counts — flip as many as you can.
+  </div>
+</div>
+
+<div id="helpModal" role="dialog" aria-label="Othello rules">
+  <div class="modal-card">
+    <button class="modal-close" id="helpClose">&times;</button>
+    <h2>How to Play Othello (Reversi)</h2>
+    <p><b>Goal:</b> have the most discs of your color on the board when it is full. You play <b>Black</b> and move first.</p>
+    <h3>Basics</h3>
+    <ul>
+      <li>Board starts with 4 discs in the center: two black, two white, diagonal.</li>
+      <li>On your turn, place one disc on an empty square.</li>
+      <li>Your new disc must <b>sandwich</b> one or more enemy discs in a straight line (row, column or diagonal) between itself and another of your discs.</li>
+      <li>All sandwiched enemy discs flip to your color.</li>
+      <li>If no square sandwiches anything, you pass (the bot moves).</li>
+    </ul>
+    <h3>End of game</h3>
+    <ul>
+      <li>Game ends when both players pass in a row (usually the board is full or no legal moves remain).</li>
+      <li>Count your discs — most discs wins.</li>
+    </ul>
+    <h3>Beginner tips</h3>
+    <ul>
+      <li>Grab corners first — once taken they never flip.</li>
+      <li>Give up early discs for corner and edge positions.</li>
+      <li>Avoid the X and C squares (next to empty corners) — they hand him the corner.</li>
+      <li>Keep your options open: pieces with many moves beat pieces hoarded.</li>
+    </ul>
+  </div>
+</div>
+
+<script type="module">
+const HUMAN = 1, BOT = 2; // 1 = black, 2 = white
+const DIRS = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+function initialBoard() {
+  const b = new Array(64).fill(0);
+  b[27] = BOT; b[28] = HUMAN; b[35] = HUMAN; b[36] = BOT; // d4 white, e4 black, d5 black, e5 white
+  return b;
+}
+const opp = s => s === HUMAN ? BOT : HUMAN;
+const inBoard = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+
+function legalMoves(board, side) {
+  const moves = [];
+  for (let i = 0; i < 64; i++) {
+    if (board[i] !== 0) continue;
+    const r = Math.floor(i / 8), c = i % 8;
+    const flips = [];
+    for (const [dr, dc] of DIRS) {
+      const line = [];
+      let rr = r + dr, cc = c + dc;
+      while (inBoard(rr, cc) && board[rr*8+cc] === opp(side)) {
+        line.push(rr*8+cc);
+        rr += dr; cc += dc;
+      }
+      if (line.length && inBoard(rr, cc) && board[rr*8+cc] === side) {
+        flips.push(...line);
+      }
+    }
+    if (flips.length) moves.push({ idx: i, flips });
+  }
+  return moves;
+}
+
+function applyMove(board, move, side) {
+  const b = board.slice();
+  b[move.idx] = side;
+  for (const f of move.flips) b[f] = side;
+  return b;
+}
+
+const PST = [
+  100,-20,10,5,5,10,-20,100,
+  -20,-50,1,1,1,1,-50,-20,
+  10,1,3,2,2,3,1,10,
+  5,1,2,1,1,2,1,5,
+  5,1,2,1,1,2,1,5,
+  10,1,3,2,2,3,1,10,
+  -20,-50,1,1,1,1,-50,-20,
+  100,-20,10,5,5,10,-20,100
+];
+
+function evaluateAbs(board) {
+  let disc = 0, pst = 0;
+  for (let i = 0; i < 64; i++) {
+    if (board[i] === HUMAN) { disc++; pst += PST[i]; }
+    else if (board[i] === BOT) { disc--; pst -= PST[i]; }
+  }
+  const huMoves = legalMoves(board, HUMAN).length;
+  const botMoves = legalMoves(board, BOT).length;
+  const mobility = (huMoves - botMoves) * 10;
+  return disc * 2 + pst + mobility;
+}
+
+function minimax(board, side, depth, alpha, beta) {
+  const moves = legalMoves(board, side);
+  const oppMoves = legalMoves(board, opp(side));
+  if (moves.length === 0 && oppMoves.length === 0) {
+    let d = 0;
+    for (let i = 0; i < 64; i++) { if (board[i] === HUMAN) d++; else if (board[i] === BOT) d--; }
+    if (d > 0) return 100000 + d;
+    if (d < 0) return -100000 + d;
+    return 0;
+  }
+  if (moves.length === 0) return minimax(board, opp(side), depth, alpha, beta);
+  if (depth === 0) return evaluateAbs(board);
+
+  const maximizing = side === HUMAN;
+  let val = maximizing ? -Infinity : Infinity;
+  for (const m of moves) {
+    const nb = applyMove(board, m, side);
+    const sc = minimax(nb, opp(side), depth - 1, alpha, beta);
+    if (maximizing) { val = Math.max(val, sc); alpha = Math.max(alpha, val); }
+    else { val = Math.min(val, sc); beta = Math.min(beta, val); }
+    if (alpha >= beta) break;
+  }
+  return val;
+}
+
+function findBestMove(board, side, depth) {
+  const isMax = side === HUMAN;
+  let best = isMax ? -Infinity : Infinity, bestMove = null;
+  for (const m of legalMoves(board, side)) {
+    const nb = applyMove(board, m, side);
+    const sc = minimax(nb, opp(side), depth - 1, -Infinity, Infinity);
+    if (isMax ? sc > best : sc < best) { best = sc; bestMove = m; }
+  }
+  return { move: bestMove, score: best };
+}
+
+// ---------- UI ----------
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const scoreEl = document.getElementById('score');
+const coachEl = document.getElementById('coach');
+const difficultyEl = document.getElementById('difficulty');
+
+let board = initialBoard();
+let turn = HUMAN;
+let lastMove = null;
+let history = [];
+let botThinking = false;
+const FILES = 'abcdefgh';
+const sqName = i => FILES[i % 8] + (8 - Math.floor(i / 8));
+
+function discs(b) {
+  let hu = 0, bo = 0;
+  for (const v of b) { if (v === HUMAN) hu++; else if (v === BOT) bo++; }
+  return { hu, bo };
+}
+
+function render() {
+  boardEl.innerHTML = '';
+  const legal = turn === HUMAN ? legalMoves(board, HUMAN).map(m => m.idx) : [];
+  const over = legalMoves(board, HUMAN).length === 0 && legalMoves(board, BOT).length === 0;
+  for (let i = 0; i < 64; i++) {
+    const sq = document.createElement('div');
+    sq.className = 'sq';
+    sq.dataset.square = i;
+    const v = board[i];
+    if (v) {
+      const el = document.createElement('div');
+      el.className = 'piece ' + (v === HUMAN ? 'b' : 'w');
+      sq.appendChild(el);
+    } else if (legal.includes(i)) {
+      sq.classList.add('hint-dot');
+    }
+    if (lastMove === i) sq.classList.add('last-move');
+    sq.addEventListener('click', onSquareClick);
+    boardEl.appendChild(sq);
+  }
+  const { hu, bo } = discs(board);
+  scoreEl.textContent = `You: ${hu} | Bot: ${bo}`;
+  updateStatus(over);
+}
+
+function updateStatus(over) {
+  if (over) {
+    const { hu, bo } = discs(board);
+    if (hu > bo) { statusEl.textContent = 'You win!'; statusEl.style.color = '#a6e3a1'; }
+    else if (bo > hu) { statusEl.textContent = 'Bot wins!'; statusEl.style.color = '#f38ba8'; }
+    else { statusEl.textContent = 'Draw!'; statusEl.style.color = '#f9e2af'; }
+    return;
+  }
+  statusEl.style.color = '#a6e3a1';
+  statusEl.textContent = turn === HUMAN ? 'Your turn (Black)' : 'Bot thinking…';
+}
+
+function setCoach(text, kind) { coachEl.textContent = text; coachEl.className = kind || ''; }
+
+function onSquareClick(e) {
+  if (botThinking || turn !== HUMAN) return;
+  const i = +e.currentTarget.dataset.square;
+  const moves = legalMoves(board, HUMAN);
+  const mv = moves.find(m => m.idx === i);
+  if (!mv) {
+    if (board[i] === 0) setCoach('No flip there. Place so you sandwich enemy discs — or it is a pass.', 'warn');
+    return;
+  }
+  const before = minimax(board, HUMAN, 2, -Infinity, Infinity);
+  history.push({ board: board.slice(), turn });
+  board = applyMove(board, mv, HUMAN);
+  lastMove = i;
+  const afterBoard = board;
+  const after = minimax(afterBoard, BOT, 2, -Infinity, Infinity);
+  const loss = before - after;
+  const verdict = reviewMove(loss, mv);
+  setCoach(verdict.text, verdict.kind);
+  turn = BOT;
+  maybePassAndBot(true);
+  render();
+}
+
+function reviewMove(loss, mv) {
+  if (loss > 800) return { text: 'Bad move. That handed over a lot. Press "Take Back" and rethink.', kind: 'bad' };
+  if (loss > 250) return { text: 'Careless — you lost material there. Look for corner and edge grabs.', kind: 'warn' };
+  if (loss < -300) return { text: 'Strong move! You gained a lot.', kind: 'good' };
+  // corner?
+  const r = Math.floor(mv.idx / 8), c = mv.idx % 8;
+  if ((r === 0 || r === 7) && (c === 0 || c === 7)) return { text: 'Corner taken — excellent. Corners never flip.', kind: 'good' };
+  return { text: `${sqName(mv.idx)} — solid. Keep hunting corners.`, kind: '' };
+}
+
+function maybePassAndBot(justMoved) {
+  // bot turn handling with pass logic
+  const botMoves = legalMoves(board, BOT);
+  const huMoves = legalMoves(board, HUMAN);
+  if (botMoves.length === 0) {
+    if (huMoves.length === 0) { render(); return; }
+    setCoach('Bot has no legal moves — pass.', '');
+    turn = HUMAN;
+    return;
+  }
+  botThinking = true;
+  updateStatus(false);
+  setTimeout(() => {
+    const depth = +difficultyEl.value;
+    const { move } = findBestMove(board, BOT, depth);
+    if (move) {
+      history.push({ board: board.slice(), turn });
+      board = applyMove(board, move, BOT);
+      lastMove = move.idx;
+    }
+    botThinking = false;
+    // after bot move, check if human passes
+    const huM = legalMoves(board, HUMAN);
+    const botM = legalMoves(board, BOT);
+    if (huM.length === 0 && botM.length > 0) {
+      setCoach('You have no legal moves — pass.', '');
+      turn = BOT;
+      render();
+      maybePassAndBot(false);
+      return;
+    }
+    turn = HUMAN;
+    render();
+  }, 450);
+  render();
+}
+
+document.getElementById('hintBtn').addEventListener('click', () => {
+  if (botThinking || turn !== HUMAN) return;
+  const moves = legalMoves(board, HUMAN);
+  if (!moves.length) { setCoach('No legal moves — pass.', ''); return; }
+  const { move } = findBestMove(board, HUMAN, 3);
+  document.querySelectorAll('.hint-from, .hint-to').forEach(el => el.classList.remove('hint-from', 'hint-to'));
+  if (move) {
+    const el = boardEl.querySelector(`[data-square="${move.idx}"]`);
+    if (el) el.classList.add('hint-to');
+    const r = Math.floor(move.idx / 8), c = move.idx % 8;
+    if ((r === 0 || r === 7) && (c === 0 || c === 7)) setCoach(`Hint: ${sqName(move.idx)} — take the corner!`, 'good');
+    else setCoach(`Hint: play ${sqName(move.idx)}. It flips ${move.flips.length} disc(s).`, '');
+  }
+});
+
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (botThinking) return;
+  if (history.length >= 2) { history.pop(); const s = history.pop(); restore(s); }
+  else if (history.length === 1) { restore(history.pop()); }
+  setCoach('Move taken back. Try a new idea.', '');
+  render();
+});
+
+function restore(s) {
+  board = s.board.slice();
+  lastMove = null;
+  turn = HUMAN;
+}
+
+const helpModal = document.getElementById('helpModal');
+document.getElementById('helpBtn').addEventListener('click', () => helpModal.classList.add('open'));
+helpModal.addEventListener('click', e => { if (e.target === helpModal) helpModal.classList.remove('open'); });
+document.getElementById('helpClose').addEventListener('click', () => helpModal.classList.remove('open'));
+document.addEventListener('keydown', e => { if (e.key === 'Escape') helpModal.classList.remove('open'); });
+
+document.getElementById('newBtn').addEventListener('click', resetGame);
+difficultyEl.addEventListener('change', resetGame);
+
+function resetGame() {
+  board = initialBoard();
+  turn = HUMAN;
+  lastMove = null;
+  history = [];
+  botThinking = false;
+  setCoach('New game. Black moves first — grab the corner when you can.', '');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

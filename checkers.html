@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Checkers Coach vs Bot</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: #1e1e2e;
+    color: #e4e4e7;
+    padding: 12px;
+  }
+  @media (min-width: 900px) {
+    body {
+      flex-direction: row;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 24px;
+      padding: 20px;
+    }
+  }
+  h1 { font-size: 1.4rem; letter-spacing: 1px; margin-bottom: 10px; }
+  @media (min-width: 900px) { h1 { font-size: 1.6rem; } }
+  #board {
+    display: grid;
+    grid-template-columns: repeat(8, min(11.5vw, 64px));
+    grid-template-rows: repeat(8, min(11.5vw, 64px));
+    border: 3px solid #45475a;
+    border-radius: 6px;
+    user-select: none;
+    touch-action: manipulation;
+  }
+  .sq {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+  }
+  .light { background: #f0d9b5; }
+  .dark { background: #b58863; }
+  .dark.playable { cursor: pointer; }
+  .sq.selected { outline: 4px solid #89b4fa; outline-offset: -4px; }
+  .sq.last-move { background: #cdd26a !important; }
+  .sq.hint-from, .sq.hint-to { outline: 4px dashed #a6e3a1; outline-offset: -4px; }
+  .sq.legal::after {
+    content: '';
+    width: 30%; height: 30%;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35);
+    position: absolute;
+  }
+  .sq.capture-target::after {
+    content: '';
+    inset: 6%;
+    border: 4px solid rgba(0,0,0,0.45);
+    border-radius: 50%;
+    position: absolute;
+  }
+  .coord {
+    position: absolute;
+    bottom: 1px; left: 3px;
+    font-size: 0.6rem;
+    color: rgba(0,0,0,0.55);
+    pointer-events: none;
+  }
+  .piece {
+    width: 78%; height: 78%;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(1rem, 5vw, 1.6rem);
+    box-shadow: inset 0 -4px 6px rgba(0,0,0,0.45), 0 2px 3px rgba(0,0,0,0.4);
+    pointer-events: none;
+  }
+  .piece.w { background: radial-gradient(circle at 35% 35%, #fff, #d5d5d5 70%, #a8a8a8); color: #7a5b00; }
+  .piece.b { background: radial-gradient(circle at 35% 35%, #555, #222 70%, #000); color: #f5c542; }
+  .piece.king::after { content: '\265B'; }
+  #panel {
+    width: 100%;
+    max-width: 440px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .card {
+    background: #313244;
+    border-radius: 10px;
+    padding: 14px;
+  }
+  #status { font-size: 1.15rem; font-weight: 700; color: #a6e3a1; }
+  #coach {
+    background: #2a2b3d;
+    border-left: 4px solid #89b4fa;
+    border-radius: 6px;
+    padding: 10px;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    min-height: 3.2em;
+  }
+  #coach.good { border-left-color: #a6e3a1; }
+  #coach.warn { border-left-color: #f9e2af; }
+  #coach.bad { border-left-color: #f38ba8; }
+  #controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, select {
+    padding: 9px 14px;
+    border-radius: 8px;
+    border: none;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: #45475a;
+    color: #e4e4e7;
+  }
+  button:hover, select:hover { background: #585b70; }
+  #hintBtn { background: #89b4fa; color: #1e1e2e; }
+  #hintBtn:hover { background: #b4befe; }
+  #undoBtn { background: #f9e2af; color: #1e1e2e; }
+  #newBtn { background: #a6e3a1; color: #1e1e2e; }
+  #moves {
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.9rem;
+    max-height: 180px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #cdd6f4;
+  }
+  #tips { font-size: 0.85rem; color: #a6adc8; line-height: 1.5; }
+  #tips b { color: #cdd6f4; }
+</style>
+</head>
+<body>
+<div>
+  <h1>Checkers Coach</h1>
+  <div id="board"></div>
+</div>
+<div id="panel">
+  <div class="card"><div id="status">Your turn (White)</div></div>
+  <div class="card">
+    <div style="margin-bottom:6px;font-weight:700;color:#cdd6f4">Coach</div>
+    <div id="coach">Captures are mandatory in checkers — always look for jumps first.</div>
+  </div>
+  <div class="card">
+    <div id="controls">
+      <button id="hintBtn">Hint</button>
+      <button id="undoBtn">Take Back</button>
+      <button id="newBtn">New Game</button>
+      <select id="difficulty">
+        <option value="1">Bot: Easy</option>
+        <option value="3" selected>Bot: Medium</option>
+        <option value="5">Bot: Hard</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <div style="margin-bottom:6px;font-weight:700;color:#cdd6f4">Moves</div>
+    <div id="moves"></div>
+  </div>
+  <div class="card" id="tips">
+    <b>Coach tips:</b><br>
+    1. Captures are mandatory — scan for jumps before anything else.<br>
+    2. Move toward the center, not the edges.<br>
+    3. Advance your pieces — kings win games.<br>
+    4. Trade pawns to simplify when you are ahead.<br>
+    5. Guard your back row — don't let him king easily.<br>
+    6. Fork: one capture that sets up another (multi-jump).
+  </div>
+</div>
+
+<script type="module">
+// American checkers (English draughts) with backward captures by men.
+const EMPTY = 0, WM = 1, WK = 2, BM = 3, BK = 4;
+const W_MAN_VAL = 100, KING_VAL = 300;
+const DIAG = [[-1,-1],[-1,1],[1,-1],[1,1]];
+const HUMAN = 'w', BOT = 'b';
+
+function initialBoard() {
+  const b = new Array(64).fill(EMPTY);
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) b[r*8+c] = BM;
+  for (let r = 5; r < 8; r++) for (let c = 0; c < 8; c++) if ((r + c) % 2 === 1) b[r*8+c] = WM;
+  return b;
+}
+const inBoard = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
+const isWhite = p => p === WM || p === WK;
+const isBlack = p => p === BM || p === BK;
+const isKing = p => p === WK || p === BK;
+const sideOf = p => isWhite(p) ? HUMAN : (isBlack(p) ? BOT : null);
+const opp = s => s === HUMAN ? BOT : HUMAN;
+
+function simpleDirs(p) {
+  if (p === WM) return [[-1,-1],[-1,1]];
+  if (p === BM) return [[1,-1],[1,1]];
+  return DIAG;
+}
+function captureDirs(p) { return DIAG; }
+
+function findJumps(board, idx, piece, captured, path) {
+  const r = Math.floor(idx / 8), c = idx % 8;
+  const results = [];
+  for (const [dr, dc] of captureDirs(piece)) {
+    const mr = r + dr, mc = c + dc, lr = r + 2*dr, lc = c + 2*dc;
+    if (!inBoard(lr, lc)) continue;
+    const mid = board[mr*8+mc];
+    if (mid === EMPTY || sideOf(mid) === sideOf(piece)) continue;
+    if (board[lr*8+lc] !== EMPTY) continue;
+    const jump = { from: mr*8+mc, to: lr*8+lc };
+    if (captured.includes(jump.from)) continue;
+    const nb = board.slice();
+    nb[jump.to] = piece; nb[idx] = EMPTY; nb[jump.from] = EMPTY;
+    let promoted = false, newPiece = piece;
+    if (piece === WM && lr === 0) { newPiece = WK; promoted = true; nb[jump.to] = WK; }
+    else if (piece === BM && lr === 7) { newPiece = BK; promoted = true; nb[jump.to] = BK; }
+    const nCaptured = [...captured, jump.from];
+    const nPath = [...path, jump.to];
+    if (promoted) {
+      results.push({ from: path[0] ?? idx, path: nPath, captured: nCaptured, promoted: true });
+      continue;
+    }
+    const further = findJumps(nb, jump.to, newPiece, nCaptured, nPath);
+    if (further.length) results.push(...further);
+    else results.push({ from: path[0] ?? idx, path: nPath, captured: nCaptured, promoted: false });
+  }
+  return results;
+}
+
+function generateMoves(board, side) {
+  const jumps = [];
+  const simples = [];
+  for (let i = 0; i < 64; i++) {
+    const p = board[i];
+    if (!p || sideOf(p) !== side) continue;
+    const r = Math.floor(i / 8), c = i % 8;
+    const js = findJumps(board, i, p, [], [i]);
+    for (const j of js) jumps.push({ ...j, piece: p, jump: true });
+    if (jumps.length === 0) {
+      for (const [dr, dc] of simpleDirs(p)) {
+        const nr = r + dr, nc = c + dc;
+        if (!inBoard(nr, nc)) continue;
+        const t = nr*8+nc;
+        if (board[t] === EMPTY) simples.push({ from: i, path: [i, t], captured: [], promoted: false, piece: p, jump: false });
+      }
+    }
+  }
+  if (jumps.length) return jumps;
+  return simples;
+}
+
+function applyMove(board, move) {
+  const b = board.slice();
+  let piece = b[move.path[0]];
+  b[move.path[0]] = EMPTY;
+  for (const cap of move.captured) b[cap] = EMPTY;
+  let last = move.path[move.path.length - 1];
+  if (piece === WM && Math.floor(last / 8) === 0) piece = WK;
+  else if (piece === BM && Math.floor(last / 8) === 7) piece = BK;
+  b[last] = piece;
+  return b;
+}
+
+function evaluateBoard(board) {
+  let score = 0;
+  for (let i = 0; i < 64; i++) {
+    const p = board[i];
+    if (!p) continue;
+    const r = Math.floor(i / 8), c = i % 8;
+    const centerBonus = (3.5 - Math.abs(3.5 - c)) * 6 + (3.5 - Math.abs(3.5 - r)) * 3;
+    if (p === WM) score += W_MAN_VAL + (7 - r) * 8 + centerBonus;
+    else if (p === WK) score += KING_VAL + centerBonus;
+    else if (p === BM) score += -(W_MAN_VAL + r * 8 + centerBonus);
+    else if (p === BK) score += -(KING_VAL + centerBonus);
+  }
+  return score;
+}
+function sideToMoveEval(board, side) {
+  const s = evaluateBoard(board);
+  return side === HUMAN ? s : -s;
+}
+
+function orderedMoves(board, side) {
+  const moves = generateMoves(board, side);
+  moves.sort((a, b) => b.captured.length - a.captured.length);
+  return moves;
+}
+
+function search(board, side, depth, alpha, beta) {
+  const moves = generateMoves(board, side);
+  if (moves.length === 0) return -100000 - depth;
+  if (depth === 0) return sideToMoveEval(board, side);
+  let best = -Infinity;
+  for (const m of orderedMoves(board, side)) {
+    const nb = applyMove(board, m);
+    const score = -search(nb, opp(side), depth - 1, -beta, -alpha);
+    if (score > best) best = score;
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break;
+  }
+  return best;
+}
+
+function findBestMove(board, side, depth) {
+  let best = -Infinity, bestMove = null;
+  for (const m of orderedMoves(board, side)) {
+    const nb = applyMove(board, m);
+    const score = -search(nb, opp(side), depth - 1, -Infinity, Infinity);
+    if (score > best) { best = score; bestMove = m; }
+  }
+  return { move: bestMove, score: best };
+}
+
+// ---------- UI ----------
+const boardEl = document.getElementById('board');
+const statusEl = document.getElementById('status');
+const coachEl = document.getElementById('coach');
+const movesEl = document.getElementById('moves');
+const difficultyEl = document.getElementById('difficulty');
+
+const HUMAN_SIDE = HUMAN;
+let board = initialBoard();
+let turn = HUMAN;
+let selected = null;         // square index of selected piece
+let legalSteps = [];         // {to, isJump} for current selection
+let chainFrom = null;        // original square of multi-jump in progress
+let chainSquare = null;      // current square of the jumping piece
+let chainPath = [];          // squares path of jump in progress
+let chainCaptured = [];      // captured squares of jump in progress
+let history = [];            // [{board, moveText, turn, lastMove}]
+let lastMove = null;         // {from, to}
+let lastMoveWasJump = false;
+let botThinking = false;
+let moveLog = [];            // SAN-ish strings
+
+const sqName = i => 'abcdefgh'[i % 8] + (8 - Math.floor(i / 8));
+
+function render() {
+  boardEl.innerHTML = '';
+  for (let r = 0; r < 8; r++) {
+    for (let c = 0; c < 8; c++) {
+      const i = r * 8 + c;
+      const playable = (r + c) % 2 === 1;
+      const sq = document.createElement('div');
+      sq.className = 'sq ' + (playable ? 'dark playable' : 'light');
+      sq.dataset.square = i;
+      const p = board[i];
+      if (p) {
+        const el = document.createElement('div');
+        el.className = 'piece ' + (isWhite(p) ? 'w' : 'b') + (isKing(p) ? ' king' : '');
+        sq.appendChild(el);
+      }
+      if (lastMove && (lastMove.from === i || lastMove.to === i)) sq.classList.add('last-move');
+      if (selected === i) sq.classList.add('selected');
+      if (legalSteps.some(s => s.to === i)) sq.classList.add(p ? 'capture-target' : 'legal');
+      if (c === 0) {
+        const rank = document.createElement('span');
+        rank.className = 'coord';
+        rank.textContent = 8 - r;
+        sq.appendChild(rank);
+      }
+      sq.addEventListener('click', onSquareClick);
+      boardEl.appendChild(sq);
+    }
+  }
+  renderMoves();
+  updateStatus();
+}
+
+function renderMoves() {
+  let html = '';
+  for (let i = 0; i < moveLog.length; i += 2) {
+    html += `<div>${i / 2 + 1}. ${moveLog[i] || ''} ${moveLog[i + 1] || ''}</div>`;
+  }
+  movesEl.innerHTML = html || '<div style="color:#6c7086">No moves yet</div>';
+  movesEl.scrollTop = movesEl.scrollHeight;
+}
+
+function sideHasMoves(side) { return generateMoves(board, side).length > 0; }
+
+function updateStatus() {
+  if (!sideHasMoves(turn)) {
+    statusEl.textContent = turn === HUMAN_SIDE ? 'No moves — bot wins!' : 'No moves — you win!';
+    statusEl.style.color = turn === HUMAN_SIDE ? '#f38ba8' : '#a6e3a1';
+    return;
+  }
+  statusEl.style.color = '#a6e3a1';
+  if (turn === HUMAN_SIDE) {
+    statusEl.textContent = chainFrom !== null ? 'Multi-jump! Keep jumping!' : 'Your turn (White)';
+  } else {
+    statusEl.textContent = 'Bot thinking…';
+  }
+}
+
+function setCoach(text, kind) {
+  coachEl.textContent = text;
+  coachEl.className = kind || '';
+}
+
+function legalStepsFor(i) {
+  // respects forced capture and active chain
+  if (chainFrom !== null) {
+    if (i !== chainSquare) return [];
+    return jumpContinuations(i);
+  }
+  const p = board[i];
+  if (!p || sideOf(p) !== turn) return [];
+  const all = generateMoves(board, turn);
+  const fromHere = all.filter(m => m.from === i);
+  if (chainFrom === null && all.some(m => m.jump) && !fromHere.some(m => m.jump)) return [];
+  // steps of first jump in each sequence, or simple moves
+  const steps = [];
+  for (const m of fromHere) {
+    steps.push({ to: m.path[1], isJump: m.jump });
+  }
+  return steps;
+}
+
+function jumpContinuations(i) {
+  const piece = board[i];
+  const r = Math.floor(i / 8), c = i % 8;
+  const steps = [];
+  for (const [dr, dc] of captureDirs(piece)) {
+    const mr = r + dr, mc = c + dc, lr = r + 2*dr, lc = c + 2*dc;
+    if (!inBoard(lr, lc)) continue;
+    const mid = mr*8+mc;
+    if (board[mid] === EMPTY || sideOf(board[mid]) === turn) continue;
+    if (chainCaptured.includes(mid)) continue;
+    if (board[lr*8+lc] !== EMPTY) continue;
+    steps.push({ to: lr*8+lc, isJump: true });
+  }
+  return steps;
+}
+
+function snapshot() {
+  return { board: board.slice(), moveLogLen: moveLog.length, lastMove, turn };
+}
+
+function onSquareClick(e) {
+  if (botThinking || turn !== HUMAN_SIDE) return;
+  if (!sideHasMoves(turn)) return;
+  const i = +e.currentTarget.dataset.square;
+  const p = board[i];
+
+  if (selected !== null && legalSteps.some(s => s.to === i)) {
+    const step = legalSteps.find(s => s.to === i);
+    const before = evalHumanPerspective(HUMAN);
+    doStep(i, step);
+    if (chainFrom === null) finishHumanMove(before);
+    render();
+    return;
+  }
+
+  // selection
+  if (chainFrom !== null) {
+    if (i === chainSquare) { selected = i; legalSteps = jumpContinuations(i); render(); }
+    return;
+  }
+  if (p && sideOf(p) === turn) {
+    const steps = legalStepsFor(i);
+    if (steps.length) { selected = i; legalSteps = steps; }
+    else { selected = null; legalSteps = []; setCoach('That piece has no moves — remember, captures are mandatory.', 'warn'); }
+  } else {
+    selected = null; legalSteps = [];
+  }
+  render();
+}
+
+function doStep(to, step) {
+  const from = chainFrom !== null ? chainSquare : selected;
+  const piece = board[from];
+  history.push(snapshot());
+  if (step.isJump) {
+    const dr = Math.sign(Math.floor(to / 8) - Math.floor(from / 8));
+    const dc = Math.sign((to % 8) - (from % 8));
+    const mid = (Math.floor(from / 8) + dr) * 8 + (from % 8 + dc);
+    if (chainFrom === null) {
+      chainFrom = from; chainPath = [from]; chainCaptured = [];
+    }
+    board[to] = piece; board[from] = EMPTY; board[mid] = EMPTY;
+    chainCaptured.push(mid);
+    chainPath.push(to);
+    chainSquare = to;
+    // promote?
+    let promoted = false;
+    if (piece === WM && Math.floor(to / 8) === 0) { board[to] = WK; promoted = true; }
+    else if (piece === BM && Math.floor(to / 8) === 7) { board[to] = BK; promoted = true; }
+    const cont = promoted ? [] : jumpContinuations(to);
+    if (cont.length === 0) {
+      endChain();
+    } else {
+      selected = to; legalSteps = cont;
+    }
+  } else {
+    board[to] = piece; board[from] = EMPTY;
+    if (piece === WM && Math.floor(to / 8) === 0) board[to] = WK;
+    else if (piece === BM && Math.floor(to / 8) === 7) board[to] = BK;
+    lastMove = { from, to };
+    lastMoveWasJump = false;
+    selected = null; legalSteps = [];
+  }
+}
+
+function endChain() {
+  lastMove = { from: chainFrom, to: chainPath[chainPath.length - 1] };
+  lastMoveWasJump = chainCaptured.length > 0;
+  selected = null; legalSteps = [];
+  chainFrom = null; chainSquare = null; chainPath = []; chainCaptured = [];
+}
+
+function moveTextFor(from, to, isJump) {
+  return sqName(from) + (isJump ? 'x' : '-') + sqName(to);
+}
+
+function evalHumanPerspective(sideToMove) {
+  const s = search(board, sideToMove, 2, -Infinity, Infinity);
+  const white = sideToMove === HUMAN ? s : -s;
+  return white;
+}
+
+function finishHumanMove(before) {
+  const after = evalHumanPerspective(BOT);
+  const loss = before - after;
+  const text = lastMove ? moveTextFor(lastMove.from, lastMove.to, lastMoveWasJump) : '';
+  moveLog.push(text);
+  const verdict = reviewHumanMove(loss, text, before, after);
+  setCoach(verdict.text, verdict.kind);
+  turn = BOT;
+  if (!sideHasMoves(turn)) { render(); return; }
+  botThinking = true;
+  updateStatus();
+  setTimeout(botMove, 450);
+}
+
+function reviewHumanMove(loss, text, before, after) {
+  if (loss > 300) return { text: `Blunder! You gave up roughly ${Math.round(loss / 100)} point(s) of material. Press "Take Back" and rethink.`, kind: 'bad' };
+  if (loss > 120) return { text: `Careless. That move cost about ${Math.round(loss / 100)} point(s). Look for captures and forks.`, kind: 'warn' };
+  if (loss < -80) return { text: `Strong move — ${text} gains material.`, kind: 'good' };
+  return { text: `${text}. Solid. Keep advancing and watch for jumps.`, kind: '' };
+}
+
+function botMove() {
+  const depth = +difficultyEl.value;
+  const { move } = findBestMove(board, BOT, depth);
+  if (move) {
+    const from = move.path[0], to = move.path[move.path.length - 1];
+    history.push(snapshot());
+    board = applyMove(board, move);
+    lastMove = { from, to };
+    moveLog.push(sqName(from) + (move.jump ? 'x' : '-') + sqName(to) + (move.captured.length > 1 ? '++' : ''));
+  }
+  botThinking = false;
+  turn = HUMAN;
+  render();
+  if (!sideHasMoves(turn)) {
+    setCoach('You are blocked in. Bot wins — rematch?', 'bad');
+    return;
+  }
+  if (!sideHasMoves(BOT)) {
+    setCoach('Bot has no moves. You win!', 'good');
+  }
+}
+
+document.getElementById('hintBtn').addEventListener('click', () => {
+  if (botThinking || turn !== HUMAN_SIDE || !sideHasMoves(turn)) return;
+  if (chainFrom !== null) { setCoach('You are mid multi-jump — you must keep jumping.', 'warn'); return; }
+  const { move } = findBestMove(board, HUMAN, 3);
+  if (!move) return;
+  document.querySelectorAll('.hint-from, .hint-to').forEach(el => el.classList.remove('hint-from', 'hint-to'));
+  const fromEl = boardEl.querySelector(`[data-square="${move.path[0]}"]`);
+  const toEl = boardEl.querySelector(`[data-square="${move.path[move.path.length - 1]}"]`);
+  if (fromEl) fromEl.classList.add('hint-from');
+  if (toEl) toEl.classList.add('hint-to');
+  const allCaptures = generateMoves(board, HUMAN).some(m => m.jump);
+  let advice;
+  if (allCaptures) advice = 'Hint: captures are mandatory — take the jump! Look at the dashed squares.';
+  else if (move.jump) advice = `Hint: jump ${sqName(move.path[0])} → ${sqName(move.path[move.path.length-1])} to win material.`;
+  else advice = `Hint: move ${sqName(move.path[0])} → ${move.path[move.path.length-1]}. Advance and control the center.`;
+  setCoach(advice, '');
+});
+
+document.getElementById('undoBtn').addEventListener('click', () => {
+  if (botThinking) return;
+  // undo last two plies (bot + human)
+  if (history.length >= 2) { history.pop(); const s = history.pop(); restore(s); }
+  else if (history.length === 1) { restore(history.pop()); }
+  setCoach('Move taken back. Try a new idea.', '');
+  render();
+});
+
+function restore(s) {
+  board = s.board.slice();
+  moveLog = moveLog.slice(0, s.moveLogLen);
+  lastMove = null;
+  turn = HUMAN;
+  chainFrom = null; chainSquare = null; chainPath = []; chainCaptured = [];
+  selected = null; legalSteps = [];
+}
+
+document.getElementById('newBtn').addEventListener('click', resetGame);
+difficultyEl.addEventListener('change', resetGame);
+
+function resetGame() {
+  board = initialBoard();
+  turn = HUMAN;
+  selected = null; legalSteps = []; chainFrom = null; chainSquare = null;
+  chainPath = []; chainCaptured = [];
+  history = []; lastMove = null; botThinking = false; moveLog = [];
+  setCoach('New game. White to move — captures are mandatory!', '');
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

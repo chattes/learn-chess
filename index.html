@@ -43,7 +43,17 @@
     touch-action: manipulation;
   }
   a.card:hover, a.card:active { background: #45475a; }
-  .icon { font-size: 3.2rem; flex-shrink: 0; }
+  .icon { font-size: 3.2rem; flex-shrink: 0; animation: bob 3.2s ease-in-out infinite; }
+  .card:nth-child(2) .icon { animation-delay: 0.5s; }
+  .card:nth-child(3) .icon { animation-delay: 1.0s; }
+  .card:nth-child(4) .icon { animation-delay: 1.5s; }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .icon { animation: none; }
+  }
   .name { font-size: 1.2rem; font-weight: 700; }
   .desc { font-size: 0.85rem; color: #a6adc8; line-height: 1.4; margin-top: 4px; }
   @media (min-width: 640px) {
